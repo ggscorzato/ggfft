@@ -13,6 +13,7 @@
       flengths[]: array of length dim;  it contains the full lengths of points foreach direction.
       nprocl[]: array of length dim; it contains the number of processors foreach direction.
       ixor[]: array of length dim; ixor[0] is the fastest direction, ixor[dim-1] the slowest in lexicografic order.
+      the three pointers above should be already allocated before passing them to gg_init.
 *****/
 void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
 
@@ -21,14 +22,9 @@ void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
 
   /*** copy the user set variables to global variables ***/
   _dim=dim;
-  _flengths=calloc(_dim,sizeof(int));
-  _nprocl=calloc(_dim,sizeof(int));
-  _ixor=calloc(_dim,sizeof(int));
-  for(mu=0;mu<_dim;mu++){
-    _flengths[mu]=flengths[mu];
-    _nprocl[mu]=nprocl[mu];
-    _ixor[mu]=ixor[mu];
-  }
+  _flengths=flengths;
+  _nprocl=nprocl;
+  _ixor=ixor;
 
   /*** define coordinates of this process w.r.t. the whole lattice, both sequential (_proc_id) and vector
      (_proc_coords) ***/
@@ -118,6 +114,7 @@ void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
     _label[i] = calloc(volproc2,sizeof(int));
   }
   free(periods);
+  free(isfft);
 }
 
 /***** finalize function to be called at the end to free memory *****/
@@ -290,6 +287,16 @@ void permute(_Complex double * vv, int deg, int * permutin, int * permutout, _Co
       }
     }
   }
+  free(lleng_in);
+  free(lleng_out);
+  free(cbasisIn);
+  free(cbasisOut);
+  free(locoIn);
+  free(locoOut);
+  free(glcoIn);
+  free(glcoOut);
+  free(proc_coordOut);
+  free(temp_orig);
 }
 
 /***** 
