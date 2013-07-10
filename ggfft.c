@@ -81,20 +81,27 @@ void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
   _fftdir[0]=_ixor[mu];
   isfft[_ixor[mu]]=1;
   _fftdim=1;
-  if(_nprocl[_ixor[mu+1]]==1 &&  _dim%2==0 && _dim>mu+1){
-    _fftdir[1]=_ixor[mu+1];
-    isfft[_ixor[mu+1]]=1;
-    _fftdim=2;
-    if(_nprocl[_ixor[mu+2]]==1 && _nprocl[_ixor[mu+3]]==1 && _dim%4==0 && _dim>mu+3){
+  if(dim>mu+1){
+    if(_nprocl[_ixor[mu+1]]==1 &&  _dim%2==0){
+      _fftdir[1]=_ixor[mu+1];
+      isfft[_ixor[mu+1]]=1;
+      _fftdim=2;
+    }
+  }
+  if (_dim>mu+2){
+    if(_nprocl[_ixor[mu+2]]==1 && _dim%3==0){
+      _fftdir[2]=_ixor[mu+2];
+      isfft[_ixor[mu+2]]=1;
+      _fftdim=3;
+    }
+  }
+  if(_dim>mu+3){
+    if(_nprocl[_ixor[mu+2]]==1 && _nprocl[_ixor[mu+3]]==1 && _dim%4==0){
       _fftdir[2]=_ixor[mu+2];
       _fftdir[3]=_ixor[mu+3];
       isfft[_ixor[mu+2]]=1;
       isfft[_ixor[mu+3]]=1;
       _fftdim=4;
-    } else if(_nprocl[_ixor[mu+2]]==1 && _dim%3==0 && _dim>mu+2){
-      _fftdir[2]=_ixor[mu+2];
-      isfft[_ixor[mu+2]]=1;
-      _fftdim=3;
     }
   }
   if(_fftdim==0){
