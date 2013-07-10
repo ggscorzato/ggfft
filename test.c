@@ -120,20 +120,15 @@ int main(int argc, char **argv){
   if(_proc_id==0) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** write the results.  *****/
-  if(_proc_id==0) for(mu=0;mu<dim;mu++) fprintf(stdout,"DEBUG test --fl[%d]=%d\n",mu,fl[mu]);
-  if(_proc_id==0) for(mu=0;mu<dim;mu++) fprintf(stdout,"DEBUG test --fbasis[%d]=%d\n",mu,fbasis[mu]);
-  if(_proc_id==0) for(mu=0;mu<dim;mu++) fprintf(stdout,"DEBUG test --_lengths[%d]=%d\n",mu,_lengths[mu]);
-  if(_proc_id==0) for(mu=0;mu<dim;mu++) fprintf(stdout,"DEBUG test --_nbasis[%d]=%d\n",mu,_nbasis[mu]);
-  fflush(stdout);
 
-  if(1){
-    sprintf(filename,"data_out_ref%d",_proc_id);
+  if(new==1){
+    sprintf(filename,"data_out_ref");
     fid=fopen(filename,"w");
     for(j=0;j<_volproc*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
     fclose(fid);
   }
   if(new==0){
-    sprintf(filename,"data_out_check",_proc_id);
+    sprintf(filename,"data_out_check");
     for(jj=0;jj<deg*_volproc*_totproc;jj++){
       MPI_Barrier(MPI_COMM_WORLD);
       fid=fopen(filename,"a");
