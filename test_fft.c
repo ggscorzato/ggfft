@@ -8,12 +8,12 @@
 #include "ggfft_int.h"
 #include "ggfft.h"
 
-/* How-to test:
-make test
-mpirun -np <nprocs> ./test <new> <dim> <deg> <l0> <l1> <l2> ...<n0> <n1> <n2> ... <ix0> <ix1> <ix2> ...
+/* How-to test_fft:
+make test_fft
+mpirun -np <nprocs> ./test_fft <new> <dim> <deg> <l0> <l1> <l2> ...<n0> <n1> <n2> ... <ix0> <ix1> <ix2> ...
 e.g.
-mpirun -np 1  ./test 1 2 7 20 20 1 1 1 0
-mpirun -np 10 ./test 0 2 7 20 20 5 2 1 0
+mpirun -np 1  ./test_fft 1 2 7 20 20 1 1 1 0
+mpirun -np 10 ./test_fft 0 2 7 20 20 5 2 1 0
 */
 
 int main(int argc, char **argv){
@@ -48,7 +48,7 @@ int main(int argc, char **argv){
   }
 
   /* init fft */
-  gg_init(dim,fl,np,ixor);
+  gg_init(dim,fl,np,ixor,deg);
   
   /* other allocations */
   fbasis=calloc(dim,sizeof(int));
@@ -120,6 +120,13 @@ int main(int argc, char **argv){
   if(_proc_id==0) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** write the results.  *****/
+  fprintf(stdout,"DEBUG: jj=%d,j=%d,pid=%d\n",jj,j,pid);fflush(fid);
+  for(mu=0;mu<dim;mu++){
+    fprintf(stdout,"DEBUG: (pid=%d, mu=%d),"
+	    "_flengths[mu]=%d,_nprocl[mu]=%d,_lengths[mu]=%d,_cbasis[mu]=%d,fbasis[mu]=%d\n",
+	    _proc_id,mu,_flengths[mu],_nprocl[mu],_lengths[mu],_cbasis[mu],fbasis[mu]);fflush(fid);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
 
   if(new==1){
     sprintf(filename,"data_out_ref");
@@ -143,11 +150,13 @@ int main(int argc, char **argv){
         j=0;
 	for(mu=0;mu<_dim;mu++) j+=coord[mu]*_cbasis[mu];
 	/*
-	fprintf(fid,"DEBUG: jj=%d,j=%d,pid=%d\n",jj,j,pid);fflush(fid);
+	fprintf(stdout,"DEBUG: jj=%d,j=%d,pid=%d\n",jj,j,pid);fflush(fid);
 	for(mu=0;mu<dim;mu++){
-	  fprintf(fid,"DEBUG: mu=%d,coord[mu]=%d,gcoord[mu]=%d,pcoord[mu]=%d\n",
-		  mu,coord[mu],gcoord[mu],pcoord[mu]);fflush(fid);
-		  } */
+	  fprintf(stdout,"DEBUG: pid=%d, mu=%d,"
+		  "coord[mu]=%d,gcoord[mu]=%d,pcoord[mu]=%d,_lengths[mu]=%d,_cbasis[mu]=%d,fbasis[mu]=%d\n",
+		  _proc_id,mu,coord[mu],gcoord[mu],pcoord[mu],_lengths[mu],_cbasis[mu],fbasis[mu]);fflush(fid);
+	}
+	*/
         fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));fflush(fid);
       }
       fclose(fid);

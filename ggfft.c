@@ -15,9 +15,9 @@
       ixor[]: array of length dim; ixor[0] is the fastest direction, ixor[dim-1] the slowest in lexicografic order.
       the three pointers above should be already allocated before passing them to gg_init.
 *****/
-void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
+void gg_init(int dim, int *flengths, int *nprocl, int *ixor, int deg){
 
-  int mu,i,*periods,*isfft,volproc2,check;
+  int mu,i,*periods,*isfft,check;
   MPI_Comm cart_comm;
 
   /*** copy the user set variables to global variables ***/
@@ -64,16 +64,19 @@ void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
     _lengths[mu]=_flengths[mu]/_nprocl[mu]; // local lengths of the portion of lattice in a process.
     _volproc*=_lengths[mu]; // local volume
   }
+
+  if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG init -- _lengths[%d]=%d\n",mu,_lengths[mu]);
+
   _cbasis=calloc(_dim,sizeof(int));
   _cbasis[_ixor[0]]=1;
   for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
-  volproc2=_volproc/_totproc;  /* fraction of volume going from any proc to any other */
 
   /*** determine the directions and the dimension of the serial FFT's ***/
   _fftdir=calloc(_dim,sizeof(int));
   _nfftdir=calloc(_dim,sizeof(int));
   isfft=calloc(_dim,sizeof(int));
   for(mu=0;mu<_dim;mu++) _fftdir[mu]=-1;
+  for(mu=0;mu<_dim;mu++) _nfftdir[mu]=-1;
   for(mu=0;mu<_dim;mu++) isfft[mu]=0;
   _fftdim=0;
   mu=0;
@@ -89,17 +92,21 @@ void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
     }
   }
   if (_dim>mu+2){
-    if(_nprocl[_ixor[mu+2]]==1 && _dim%3==0){
+    if(_nprocl[_ixor[mu+1]]==1 && _nprocl[_ixor[mu+2]]==1 && _dim%3==0){
+      _fftdir[1]=_ixor[mu+1];
+      isfft[_ixor[mu+1]]=1;
       _fftdir[2]=_ixor[mu+2];
       isfft[_ixor[mu+2]]=1;
       _fftdim=3;
     }
   }
   if(_dim>mu+3){
-    if(_nprocl[_ixor[mu+2]]==1 && _nprocl[_ixor[mu+3]]==1 && _dim%4==0){
+    if(_nprocl[_ixor[mu+1]]==1 && _nprocl[_ixor[mu+2]]==1 && _nprocl[_ixor[mu+3]]==1 && _dim%4==0){
+      _fftdir[1]=_ixor[mu+1];
+      isfft[_ixor[mu+1]]=1;
       _fftdir[2]=_ixor[mu+2];
-      _fftdir[3]=_ixor[mu+3];
       isfft[_ixor[mu+2]]=1;
+      _fftdir[3]=_ixor[mu+3];
       isfft[_ixor[mu+3]]=1;
       _fftdim=4;
     }
@@ -112,24 +119,40 @@ void gg_init(int dim, int *flengths, int *nprocl, int *ixor){
   for(mu=0;mu<_dim;mu++){
     if(!isfft[mu]){
       _nfftdir[i] = mu;
+      i++;
     }
   }
   /*** allocate labels and indices for exchange vectors ***/
   _kk = calloc(_totproc,sizeof(int));
   _label = calloc(_totproc,sizeof(int*));
   for(i=0;i<_totproc;i++){
-    _label[i] = calloc(volproc2,sizeof(int));
+    _label[i] = calloc(_volproc,sizeof(int));
   }
+  ___mail=(_Complex double*)malloc(_totproc*_volproc*deg*sizeof(_Complex double));
+  __mail=(_Complex double**)malloc(_totproc*_volproc*sizeof(_Complex double*));
+  _Mail = (_Complex double***)malloc(_totproc*sizeof(_Complex double**));
+  __mail[0]=___mail;
+  for(i=1;i<_totproc*_volproc;i++){
+    __mail[i]=__mail[i-1] + deg;
+  }
+  _Mail[0]=__mail;
+  for(i=1;i<_totproc;i++){
+    _Mail[i]=_Mail[i-1] + _volproc;
+  }
+
+  fprintf(stdout,"DEBUG fftinit (%d) -- _fftdim=%d\n",_proc_id,_fftdim);
+  for(mu=0;mu<_dim;mu++){
+    fprintf(stdout,"DEBUG fftinit (%d,%d) -- _fftdir[mu]=%d,_nfftdir[mu]=%d,isfft[mu]=%d\n",
+	    _proc_id,mu,_fftdir[mu],_nfftdir[mu],isfft[mu]);
+  }
+
   free(periods);
   free(isfft);
 }
 
 /***** finalize function to be called at the end to free memory *****/
 void gg_finalize(){
-  free(_flengths);
   free(_lengths);
-  free(_nprocl);
-  free(_ixor);
   free(_proc_coords);
   free(_nbasis);
   free(_cbasis);
@@ -137,6 +160,7 @@ void gg_finalize(){
   free(_nfftdir);
   free(_kk);
   free(_label);
+  free(_Mail);
 }
 
 /*****  distributed multidimensional FFT.
@@ -147,19 +171,9 @@ void gg_finalize(){
 
 void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
 
-  int i,j,nfftpoints,repl_slow,repl_fast,mu,it,jj,nu,volproc2;
+  int nfftpoints,repl_slow,repl_fast,mu,it,jj,nu;
   int *nn, *inperm, *outperm;
-  _Complex double *** Mail,* pnt0;
-
-  /* allocate exchange vectors */
-  volproc2=_volproc/_totproc;
-  Mail = malloc(_totproc*sizeof(_Complex double**));
-  for(i=0;i<_totproc;i++){
-    Mail[i] = malloc(volproc2*sizeof(_Complex double*));
-    for(j=0;j<volproc2;j++){
-      Mail[i][j] = malloc(deg*sizeof(_Complex double));
-    }
-  }
+  _Complex double * pnt0;
 
   inperm=calloc(_dim,sizeof(int));
   for(mu=0; mu<_dim;mu++) inperm[mu]=mu;
@@ -168,6 +182,9 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
   nn=calloc(_fftdim,sizeof(int));
   for(mu=0; mu<_fftdim;mu++) nn[mu] = _flengths[_fftdir[mu]];
   for(mu=0;mu<_dim;mu++) _lengths[mu]=_flengths[mu]/_nprocl[mu];
+
+  if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG mdfft -- _lengths[%d]=%d\n",mu,_lengths[mu]);
+
   _cbasis[_ixor[0]]=1;
   for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
   repl_fast=_cbasis[_fftdir[0]];
@@ -179,7 +196,7 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
 
     for(jj=0;jj<repl_slow;jj++){  /* loop on all points in orthogonal directions */
       pnt0=vv+(jj*(nfftpoints)*repl_fast*deg);
-      serial_multidim_fft(pnt0,repl_fast*deg,nn,_fftdim,fftflag);  /* fft on the LAST _fftdim directions */
+      // serial_multidim_fft(pnt0,repl_fast*deg,nn,_fftdim,fftflag);  /* fft on the LAST _fftdim directions */
     }
     
     if(it<_dim-_fftdim){                   /* transpose after fft, except the last time */
@@ -188,10 +205,13 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
 	outperm[_fftdir[mu]] = inperm[_nfftdir[it+mu]];
       }
       
-      permute(vv,deg,inperm,outperm,Mail);
+      permute(vv,deg,inperm,outperm);
       
       for(mu=0; mu<_fftdim;mu++) nn[mu] = _flengths[outperm[_fftdir[mu]]];
       for(mu=0;mu<_dim;mu++) _lengths[mu]=_flengths[outperm[mu]]/_nprocl[mu];
+
+      if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG dmfft iter -- _lengths[%d]=%d\n",mu,_lengths[mu]);
+
       _cbasis[_ixor[0]]=1;
       for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
       repl_fast=_cbasis[_fftdir[0]];
@@ -202,19 +222,23 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
       for(nu=0; nu<_dim;nu++) inperm[nu]=outperm[nu];
     }
   }  /* endo of loop on fft subspaces */
-  
-  for(nu=0; nu<_dim;nu++) outperm[nu]=nu; /* set back to the original order. */
-  permute(vv,deg,inperm,outperm,Mail);
 
-  free(Mail);
+  if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG dmfft before last perm -- _lengths[%d]=%d\n",mu,_lengths[mu]);  
+  for(nu=0; nu<_dim;nu++) outperm[nu]=nu; /* set back to the original order. */
+  //  permute(vv,deg,inperm,outperm); DEBUG
+
+  if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG dmfft after last perm -- _lengths[%d]=%d\n",mu,_lengths[mu]);
+
   free(inperm);
   free(outperm);
   free(nn);
+
+  if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG dmfft after free -- _lengths[%d]=%d\n",mu,_lengths[mu]);
 }
 
 /*****
       Permutes the dim-dimensional array vv (linearly arranged), according to the permutation permutin ->
-      permutout.  Two permutation argumens are useful because the routine makes reference also to variables
+      permutout.  Two permutation arguments are useful because the routine makes reference also to variables
       (_nprocl, _proc_coords, _nbasis) that always refer to the original ordering and are never changed by a
       permutation. In fact, only the data in vv are permuted. No global variable is changed.
       vv[]: array of size= deg * (\prod_mu _flengths[mu]). This vector will be permuted. [I&O]
@@ -222,11 +246,17 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
       permutout[]: permutation of the original coordinates found in output [O]
 *****/
 
-void permute(_Complex double * vv, int deg, int * permutin, int * permutout, _Complex double *** Mail){
+// TODO: only transpose, save space (allocate only one volproc, and create a sinle index for nodes and seq)
 
-  int seqin,seqout,mu,ind,i,j,ka,proc_out,volproc2;
+void permute(_Complex double * vv, int deg, int * permutin, int * permutout){
+
+  int check_lab,check_mail;
+  int seqin,seqout,mu,ind,i,j,ka,proc_out;
   int *lleng_in,*lleng_out,*temp_orig,*locoIn,* glcoIn,*locoOut,* glcoOut,*proc_coordOut,*cbasisIn,*cbasisOut;
-  MPI_Status mpistatus;
+  //  MPI_Request *req_mail, *req_lab;
+  //  MPI_Status *stat_mail, *stat_lab;
+
+  if(_proc_id==1) for(mu=0;mu<_dim;mu++) fprintf(stdout,"DEBUG perm start -- _lengths[%d]=%d\n",mu,_lengths[mu]);
 
   lleng_in=calloc(_dim,sizeof(int));
   lleng_out=calloc(_dim,sizeof(int));
@@ -238,9 +268,11 @@ void permute(_Complex double * vv, int deg, int * permutin, int * permutout, _Co
   glcoOut=calloc(_dim,sizeof(int));
   proc_coordOut=calloc(_dim,sizeof(int));
   temp_orig=calloc(_dim,sizeof(int));
-
-  volproc2=_volproc/_totproc;
-
+  /*  req_mail=malloc(_totproc*sizeof(MPI_Request));
+  req_lab=malloc(_totproc*sizeof(MPI_Request));
+  stat_mail=malloc(_totproc*sizeof(MPI_Status));
+  stat_lab=malloc(_totproc*sizeof(MPI_Status));
+  */
 
   for(mu=0; mu<_dim; mu++){
     lleng_in[mu]=_flengths[permutin[mu]]/_nprocl[mu];
@@ -275,25 +307,51 @@ void permute(_Complex double * vv, int deg, int * permutin, int * permutout, _Co
       proc_out+=proc_coordOut[mu]*_nbasis[mu];
       seqout+=locoOut[mu]*cbasisOut[mu];
     }
-    for(j=0;j<deg;j++) Mail[proc_out][_kk[proc_out]][j]=vv[i*deg+j];  // store index and variable for expedition
+
+    fprintf(stdout,"DEBUG perm (pid=%d),pout=%d;seqin=%d,seqout=%d,",_proc_id,proc_out,seqin,seqout);
+    for(mu=0;mu<_dim;mu++)     fprintf(stdout,"glcoIn[%d]=%d;",mu,glcoIn[mu]);
+    for(mu=0;mu<_dim;mu++)     fprintf(stdout,"glcoOut[%d]=%d;",mu,glcoOut[mu]);
+    //fprintf(stdout,"\n"); 
+    fprintf(stdout,"rdata[%d]=%g\n",i,creal(vv[i])); 
+    fflush(stdout);
+
+    for(j=0;j<deg;j++) _Mail[proc_out][_kk[proc_out]][j]=vv[i*deg+j];  // store index and variable for expedition
     _label[proc_out][_kk[proc_out]]=seqout;
     _kk[proc_out]++;
   } // end of main loop on every local site.
 
+  for(ind=0; ind < _totproc; ind++)
+    for(j=0; j < _kk[ind]; j++)
+      fprintf(stdout,"(<,%d) Mail[%d][%d]=%g,label=%d\n",
+	      _proc_id,ind,j,creal(_Mail[ind][j][0]),_label[ind][j]);
+  fflush(stdout);
+  
+  for(ind=0;ind<_totproc;ind++) fprintf(stdout,"DEBUG perm (pid=%d,pout=%d):kk_max=%d\n",_proc_id,ind,_kk[ind]);fflush(stdout);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
   for(ind=0; ind < _totproc; ind++){  // Send
     if(ind!=_proc_id){
-      MPI_Sendrecv_replace(Mail[ind][0],volproc2*deg,MPI_DOUBLE_COMPLEX,ind,0,ind,MPI_ANY_TAG,MPI_COMM_WORLD,
-			   &mpistatus);
-      MPI_Sendrecv_replace(_label[ind],volproc2,MPI_INT,ind,0,ind,MPI_ANY_TAG,MPI_COMM_WORLD,&mpistatus);
+      check_lab=MPI_Sendrecv_replace(_label[ind],_kk[ind],MPI_INT,ind,_totproc+_proc_id,ind,_totproc+ind,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      check_mail=MPI_Sendrecv_replace(_Mail[ind][0],_kk[ind]*deg,MPI_DOUBLE_COMPLEX,ind,_proc_id,ind,ind,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
     }
   }
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  for(ind=0; ind < _totproc; ind++) 
+    for(j=0; j< _kk[ind]; j++) 
+      fprintf(stdout,"(>,%d) Mail[%d][%d]=%g,label=%d,cmail=%d,clab=%d\n",
+	      _proc_id,ind,j,creal(_Mail[ind][j][0]),_label[ind][j],check_mail,check_lab);
+  fflush(stdout);
+
   for(ind=0; ind< _totproc; ind++){   // copy back the exchanged data onto the array vv
-    for(ka=0; ka< volproc2; ka++){
+    for(ka=0; ka< _kk[ind]; ka++){
       for(j=0;j<deg;j++){
-	vv[_label[ind][ka]*deg+j]=Mail[ind][ka][j];
+	vv[_label[ind][ka]*deg+j]=_Mail[ind][ka][j];
       }
     }
   }
+  
   free(lleng_in);
   free(lleng_out);
   free(cbasisIn);
@@ -304,6 +362,10 @@ void permute(_Complex double * vv, int deg, int * permutin, int * permutout, _Co
   free(glcoOut);
   free(proc_coordOut);
   free(temp_orig);
+  /*  free(req_mail);
+  free(stat_mail);
+  free(req_lab);
+  free(stat_lab);*/
 }
 
 /***** 

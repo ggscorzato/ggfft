@@ -12,7 +12,7 @@ AR=ar
 # code specific definitions:
 
 TGLIB = libggfft.a
-TGPROG = test
+TGPROG = test_fft
 CFLAGS=-I. -g -msse3 -Wall
 LDFLAGS=-L. -lggfft  -lm -Wall
 
@@ -44,7 +44,7 @@ clean:
 	@$(rm) $(OBJECTS) 
 	@echo "Cleanup complete!"
 
-.PHONEY: remove
-remove: clean
-	@$(rm) $(BINDIR)/$(TGPROG) $(BINDIR)/$(TGLIB)
+.PHONEY: rm
+remove: 
+	@$(rm) $(OBJECTS) $(BINDIR)/$(TGPROG) $(BINDIR)/$(TGLIB)
 	@echo "Executable removed!"
