@@ -44,7 +44,7 @@ clean:
 	@$(rm) $(OBJECTS) 
 	@echo "Cleanup complete!"
 
-.PHONEY: rm
+.PHONEY: remove
 remove: 
 	@$(rm) $(OBJECTS) $(BINDIR)/$(TGPROG) $(BINDIR)/$(TGLIB)
-	@echo "Executable removed!"
+	@echo "Objects and Executable removed!"

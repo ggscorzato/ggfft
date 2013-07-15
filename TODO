@@ -1,0 +1,14 @@
+DEBUGGING:
+- lattice 4 8 8 mesh: 1 2 4 WRONG.
+
+IMPROVEMENTS:
+
+1. Substitute the variable _Mail with one which has only size=_volproc.
+
+2. Introduce an init_transpose, to be executed in init to pre-compute the indices:
+_idest[seqin]=seqout;
+_pdest[seqin]=proc_out;
+_ordinpout[seqin]=_kk[proc_out];
+foreach needed fft. While the call to transpose only exchanges the appropriate data.
+
+3. call fftw for the serial fft.

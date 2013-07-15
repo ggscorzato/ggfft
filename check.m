@@ -24,3 +24,19 @@ mpirun -np <np> ./test 0 <dim> <deg> <full length dir 0> <full length dir 1> ...
 
 diff data_in_ref data_in_check    #should coincide up to rounding errors
 diff data_out_ref data_out_check    #should coincide up to rounding errors
+
+
+%%%%%%%%%%%%%%%%%%% checks done:
+mpirun -np 8 ./test_fft 0 3 1   8 8 8   1 2 4   2 1 0
+mpirun -np 4 ./test_fft 0 3 1   2 4 2   1 2 2   2 1 0
+
+%%%%%%%%%%%%%%%%%%% checks of transpose only done. Check fft
+mpirun -np 4 ./test_fft 0 3 1   4 8 8   1 2 2   2 1 0  (fft no)
+mpirun -np 4 ./test_fft 0 3 1   2 4 4   1 2 2   2 1 0  (fft no)
+mpirun -np 8 ./test_fft 0 3 1   4 8 8   1 4 2   2 1 0
+mpirun -np 8 ./test_fft 0 3 1   4 8 8   4 1 2   2 1 0
+
+
+%%%%%%%%%%%%%%%%%%% segmentation fault (obvious! introduce a check!).
+mpirun -np 8 ./test_fft 0 3 1   4 2 2   4 1 2   2 1 0
+mpirun -np 4 ./test_fft 0 3 1   4 2 2   4 1 1   2 1 0

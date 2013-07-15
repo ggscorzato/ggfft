@@ -18,7 +18,7 @@ mpirun -np 10 ./test_fft 0 2 7 20 20 5 2 1 0
 
 int main(int argc, char **argv){
 
-  int flag,deg,fsize,j,mu,dim,*fl,*np,*ixor,c0,new,nprocs,*fbasis,*coord,*gcoord,*pcoord,jj,pid;
+  int flag,deg,fsize,j,mu,dim,*fl,*np,*ixor,c0,new,nprocs,*fbasis,*coord,*gcoord,*pcoord,jj,pid,*pi,*po;
   _Complex double *data,*fdata;
   double *rdata,dvar,dvai;
   FILE * fid=NULL;
@@ -41,12 +41,19 @@ int main(int argc, char **argv){
   fsize=1;
   for(mu=0;mu<dim;mu++) fsize*=fl[mu];
   for(mu=0;mu<dim;mu++) np[mu]=atoi(argv[mu+c0+dim]);
-  if(new==0){
+  if(new<1){
     for(mu=0;mu<dim;mu++) ixor[mu]=atoi(argv[mu+c0+2*dim]);
   } else if (new==1){
     for(mu=0;mu<dim;mu++) ixor[mu]=dim-mu-1; /* if I generate a new vector I impose ixor=dim-1...0*/
   }
 
+  if(new==-1){
+    pi=calloc(dim,sizeof(int));
+    po=calloc(dim,sizeof(int));
+    for(mu=0;mu<dim;mu++) pi[mu]=atoi(argv[mu+c0+3*dim]);
+    for(mu=0;mu<dim;mu++) po[mu]=atoi(argv[mu+c0+4*dim]);
+  }
+  
   /* init fft */
   gg_init(dim,fl,np,ixor,deg);
   
@@ -77,7 +84,7 @@ int main(int argc, char **argv){
     for(j=0;j<fsize*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
     fclose(fid);
     
-  } else if(new==0){            /*** otherwise I read it... ***/
+  } else if(new<1){            /*** otherwise I read it... ***/
     if(_proc_id==0) {
       fid = fopen("data_in_ref", "r");
       j=0;
@@ -111,22 +118,34 @@ int main(int argc, char **argv){
     }
   }                               /*** end of if(new==...) ***/
 
-  if(_proc_id==0) fprintf(stdout,"DEBUG test -- data generated or read, e.g. data[0].re=%g\n",creal(data[0]));
+  if(_proc_id==1) fprintf(stdout,"DEBUG test -- data generated or read, e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** Actual FFT *****/
   flag=-1;
-  gg_distributed_multidim_fft(flag, data, deg);
-  
-  if(_proc_id==0) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
+
+  if(new==-1){
+    transpose(data,deg,pi,po);
+  } else{
+    gg_distributed_multidim_fft(flag, data, deg);
+  }
+
+  if(_proc_id==1) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** write the results.  *****/
-  fprintf(stdout,"DEBUG: jj=%d,j=%d,pid=%d\n",jj,j,pid);fflush(fid);
+  fprintf(stdout,"DEBUG: new=%d,jj=%d,j=%d",new,jj,j);fflush(fid);
   for(mu=0;mu<dim;mu++){
-    fprintf(stdout,"DEBUG: (pid=%d, mu=%d),"
-	    "_flengths[mu]=%d,_nprocl[mu]=%d,_lengths[mu]=%d,_cbasis[mu]=%d,fbasis[mu]=%d\n",
-	    _proc_id,mu,_flengths[mu],_nprocl[mu],_lengths[mu],_cbasis[mu],fbasis[mu]);fflush(fid);
+    fprintf(stdout,"(pid=%d, mu=%d),"
+	    "_flengths[mu]=%d,_nprocl[mu]=%d,_lengths[mu]=%d,_cbasis[mu]=%d,fbasis[mu]=%d,nbasis[mu]=%d",
+	    _proc_id,mu,_flengths[mu],_nprocl[mu],_lengths[mu],_cbasis[mu],fbasis[mu],_nbasis[mu]);
   }
+  fprintf(stdout,"\n"); 
+  fflush(fid);
+
   MPI_Barrier(MPI_COMM_WORLD);
+
+  for(mu=0;mu<_dim;mu++) _lengths[mu]=fl[mu]/_nprocl[mu];
+  _cbasis[_ixor[0]]=1;
+  for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
 
   if(new==1){
     sprintf(filename,"data_out_ref");
@@ -134,11 +153,9 @@ int main(int argc, char **argv){
     for(j=0;j<_volproc*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
     fclose(fid);
   }
-  if(new==0){
+  if(new<1){
     sprintf(filename,"data_out_check");
     for(jj=0;jj<deg*_volproc*_totproc;jj++){
-      MPI_Barrier(MPI_COMM_WORLD);
-      fid=fopen(filename,"a");
       pid=0;
       for(mu=0;mu<dim;mu++){
         gcoord[mu]= (jj / fbasis[mu] ) % fl[mu];
@@ -146,20 +163,56 @@ int main(int argc, char **argv){
         pcoord[mu] = gcoord[mu] / _lengths[mu];
         pid+=pcoord[mu]*_nbasis[mu];
       }
+
+      MPI_Barrier(MPI_COMM_WORLD);
       if(pid==_proc_id){
         j=0;
 	for(mu=0;mu<_dim;mu++) j+=coord[mu]*_cbasis[mu];
-	/*
-	fprintf(stdout,"DEBUG: jj=%d,j=%d,pid=%d\n",jj,j,pid);fflush(fid);
-	for(mu=0;mu<dim;mu++){
-	  fprintf(stdout,"DEBUG: pid=%d, mu=%d,"
-		  "coord[mu]=%d,gcoord[mu]=%d,pcoord[mu]=%d,_lengths[mu]=%d,_cbasis[mu]=%d,fbasis[mu]=%d\n",
-		  _proc_id,mu,coord[mu],gcoord[mu],pcoord[mu],_lengths[mu],_cbasis[mu],fbasis[mu]);fflush(fid);
+
+	fprintf(stdout,"ODD-PID: pid=%d,poc_id=%d,jj=%d,j=%d,coord=(",pid,_proc_id,jj,j);
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",coord[mu]);
 	}
-	*/
+	fprintf(stdout,"), gcoord=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",gcoord[mu]);
+	}
+	fprintf(stdout,"), pcoord=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",pcoord[mu]);
+	}
+	fprintf(stdout,"), nprocl=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",_nprocl[mu]);
+	}
+	fprintf(stdout,"), fl=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",fl[mu]);
+	}
+	fprintf(stdout,"), fb=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",fbasis[mu]);
+	}
+	fprintf(stdout,"), cb=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",_cbasis[mu]);
+	}
+	fprintf(stdout,"), lengths=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",_lengths[mu]);
+	}
+	fprintf(stdout,"), nb=(");
+	for(mu=0;mu<_dim;mu++){
+	  fprintf(stdout,"%d,",_nbasis[mu]);
+	}
+	fprintf(stdout,").");
+	fprintf(stdout,"vv=%g, %g\n",creal(data[j]),cimag(data[j]));
+	fflush(stdout);
+
+	fid=fopen(filename,"a");
         fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));fflush(fid);
+	fclose(fid);
       }
-      fclose(fid);
       MPI_Barrier(MPI_COMM_WORLD);
     }
   }

@@ -24,11 +24,11 @@
 
 int _dim, _volproc, _totproc, _fftdim, _proc_id;
 int *_flengths, *_lengths, *_nprocl, *_ixor, *_cbasis, *_nbasis, *_fftdir, *_nfftdir,*_proc_coords;
-int **_label, *_kk;
+int **_label, *__label, *_kk, *_pp;
 _Complex double ***_Mail,**__mail, *___mail;
 
 /***** DECLARATION OF FUNCTIONS USED ONLY INTERNALLY (THOSE AVAILABLE TO USER ARE IN ggfft.h) *****/
-void permute(_Complex double * vv, int deg, int * permutin, int * permutout);
+void transpose(_Complex double * vv, int deg, int * permutin, int *permutout);
 void serial_multidim_fft(_Complex double * cdata, int fdeg, int * nn, int dim_sfft, int isign);
 
 
