@@ -1,5 +1,6 @@
 DEBUGGING:
-- lattice 4 8 8 mesh: 1 2 4 WRONG.
+- more tests with strange lattices
+- test ordering
 
 IMPROVEMENTS:
 

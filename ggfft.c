@@ -176,14 +176,23 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
   int *nn, *inperm, *outperm;
   _Complex double * pnt0;
 
-  fprintf(stdout,"DEBUG gmfft (%d) -- entered. \n",_proc_id); fflush(stdout);
+#if DEBUG
+  fprintf(stdout,"DEBUG gmfft (%d) -- entered. ",_proc_id); fflush(stdout);
+  if(_proc_id==0){
+    fprintf(stdout,"fftdim=%d, _fftdir=(",_fftdim); 
+    for(mu=0;mu<_fftdim;mu++){
+      fprintf(stdout,"%d,",_fftdir[mu]);
+    }
+    fprintf(stdout,")\n");
+  }
+#endif
 
   inperm=calloc(_dim,sizeof(int));
   for(mu=0; mu<_dim;mu++) inperm[mu]=mu;
   outperm=calloc(_dim,sizeof(int));
   for(mu=0; mu<_dim;mu++) outperm[mu]=mu;
   nn=calloc(_fftdim,sizeof(int));
-  for(mu=0; mu<_fftdim;mu++) nn[mu] = _flengths[_fftdir[mu]];
+  for(mu=0; mu<_fftdim;mu++) nn[_fftdim-1-mu] = _flengths[_fftdir[mu]]; /* last index procedes most rapidly in the serial fft */
   for(mu=0;mu<_dim;mu++) _lengths[mu]=_flengths[mu]/_nprocl[mu];
   _cbasis[_ixor[0]]=1;
   for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
@@ -192,11 +201,7 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
   for(mu=0;mu<_fftdim;mu++) nfftpoints*=_lengths[_fftdir[mu]];
   repl_slow=_volproc/(repl_fast*nfftpoints);
 
-  fprintf(stdout,"DEBUG gmfft (%d) -- before cycle.\n",_proc_id); fflush(stdout);
-
   for(it=0;it<_dim;it+=_fftdim){  /* loop on fft subspaces */
-
-    fprintf(stdout,"DEBUG gmfft (%d,%d) -- in cycle.\n",_proc_id,it); fflush(stdout);
 
     for(jj=0;jj<repl_slow;jj++){  /* loop on all points in orthogonal directions */
       pnt0=vv+(jj*(nfftpoints)*repl_fast*deg);
@@ -210,13 +215,9 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
 	outperm[_fftdir[mu]] = inperm[_nfftdir[it+mu]];
       }
 
-      fprintf(stdout,"DEBUG gmfft (%d,%d) -- before trans.\n",_proc_id,it); fflush(stdout);
-          
       transpose(vv,deg,inperm,outperm);
       
-      fprintf(stdout,"DEBUG gmfft (%d,%d) -- after  trans.\n",_proc_id,it); fflush(stdout);
-
-      for(mu=0; mu<_fftdim;mu++) nn[mu] = _flengths[outperm[_fftdir[mu]]];
+      for(mu=0; mu<_fftdim;mu++) nn[_fftdim-1-mu] = _flengths[outperm[_fftdir[mu]]];
       for(mu=0;mu<_dim;mu++) _lengths[mu]=_flengths[outperm[mu]]/_nprocl[mu];
       _cbasis[_ixor[0]]=1;
       for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
@@ -229,7 +230,6 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
 
     }
 
-    fprintf(stdout,"DEBUG gmfft (%d,%d) -- end cycle.\n",_proc_id,it); fflush(stdout);
   }  /* endo of loop on fft subspaces */
 
   for(it=_dim-2*_fftdim;it>=0;it-=_fftdim){  /* permute back by the reversed sequence of transpositions */
@@ -241,6 +241,11 @@ void gg_distributed_multidim_fft(int fftflag, _Complex double * vv, int deg){
     transpose(vv,deg,inperm,outperm);
     for(mu=0; mu<_dim;mu++) inperm[mu]=outperm[mu];
   }
+
+  /* put back the global variables that we changed */
+  for(mu=0;mu<_dim;mu++) _lengths[mu]=_flengths[mu]/_nprocl[mu];
+  _cbasis[_ixor[0]]=1;
+  for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
 
   free(inperm);
   free(outperm);
@@ -260,20 +265,6 @@ void transpose(_Complex double * vv, int deg, int * permutin, int * permutout){
 
   int seqin,seqout,mu,ind,i,j,ka,proc_out,nprocdest;
   int *lleng_in,*lleng_out,*temp_orig,*locoIn,* glcoIn,*locoOut,* glcoOut,*proc_coordOut,*cbasisIn,*cbasisOut;
-
-  if(_proc_id==0){
-    fprintf(stdout,"DEBUG transpose -- inp:("); 
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",permutin[mu]);
-    }
-    fprintf(stdout,") outp:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",permutout[mu]);
-    }
-    fprintf(stdout,")\n");
-    fflush(stdout);
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
 
   lleng_in=calloc(_dim,sizeof(int));
   lleng_out=calloc(_dim,sizeof(int));
@@ -298,36 +289,6 @@ void transpose(_Complex double * vv, int deg, int * permutin, int * permutout){
     cbasisOut[_ixor[mu]]=cbasisOut[_ixor[mu-1]]*lleng_out[_ixor[mu-1]];
   }
 
-  if(_proc_id==0){
-    fprintf(stdout,"DEBUG transpose -- fl:("); 
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",_flengths[mu]);
-    }
-    fprintf(stdout,"); nprocl:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",_nprocl[mu]);
-    }
-    fprintf(stdout,"); lin:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",lleng_in[mu]);
-    }
-    fprintf(stdout,"); lout:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",lleng_out[mu]);
-    }
-    fprintf(stdout,"); cbin:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",cbasisIn[mu]);
-    }
-    fprintf(stdout,"); cbout:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",cbasisOut[mu]);
-    }
-    fprintf(stdout,").\n");
-  }
-  fflush(stdout);
-  MPI_Barrier(MPI_COMM_WORLD);
-
   for(ind=0; ind < _totproc; ind++) _kk[ind]=0;
   for(ind=0; ind < _totproc; ind++) _pp[ind]=-1;
   nprocdest=0;
@@ -351,30 +312,6 @@ void transpose(_Complex double * vv, int deg, int * permutin, int * permutout){
       proc_out+=proc_coordOut[mu]*_nbasis[mu];
       seqout+=locoOut[mu]*cbasisOut[mu];
     }
-
-    fprintf(stdout,"DEBUG transpose (%d,%d) -- glcoIn:(",_proc_id,i); 
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",glcoIn[mu]);
-    }
-    fprintf(stdout,"); glcoOut:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",glcoOut[mu]);
-    }
-    fprintf(stdout,"); locoIn:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",locoIn[mu]);
-    }
-    fprintf(stdout,"); locoOut:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",locoOut[mu]);
-    }
-    fprintf(stdout,"); proc_coordOut:(");
-    for(mu=0;mu<_dim;mu++){
-      fprintf(stdout,"%d,",proc_coordOut[mu]);
-    }
-    fprintf(stdout,")...");
-    fprintf(stdout,"(%d->%d),[%d->%d], vv=%g.\n",_proc_id,proc_out,seqin,seqout,creal(vv[seqin]));
-    fflush(stdout);
 
     if(_kk[proc_out]==0){
       _pp[proc_out]=nprocdest;
@@ -417,18 +354,18 @@ void transpose(_Complex double * vv, int deg, int * permutin, int * permutout){
 
 /***** 
        Numerical Recipes function fourn, slightly modifyed to operate deg complex FFT at the same time.  Data are
-       in cdata[0...(prod_nn*deg)-1]. The routine replaces cdata by its (dim_sfft)-dimensional discrete Fourier
-       transform, if isign is input as 1.  nn[0...(dim_sfft)-1] is an integer array containing the lengths of each
+       in cdata[0...(prod_nn*deg)-1]. The routine replaces cdata by its (sdim)-dimensional discrete Fourier
+       transform, if isign is input as 1.  nn[0...(sdim)-1] is an integer array containing the lengths of each
        dimension (number of complex values), which MUST all be powers of 2. data is a real array of length twice
        the product of these lengths, in which the data are stored as in a multidimensional complex array: real and
-       imaginary parts of each element are in consecutive locations, and the rightmost index of the array increases
-       most rapidly as one proceeds along data.  For a two-dimensional array, this is equivalent to storing the
-       array by rows. If isign is input as -1, data is replaced by its inverse transform times the product of the
-       lengths of all dimensions.  call it with isign=-1 to have the same definition of matlab fft: F_k =
-       \sum_j=0^N-1 exp[-i 2 \pi j k] f_k
+       imaginary parts of each element are in consecutive locations, and the sdim-1 index of the array increases
+       most rapidly (the 0th index more slowly) as one proceeds along data.  For a two-dimensional array, this is
+       equivalent to storing the array by rows. If isign is input as -1, data is replaced by its inverse transform
+       times the product of the lengths of all dimensions.  call it with isign=-1 to have the same definition of
+       matlab fft: F_k = \sum_j=0^N-1 exp[-i 2 \pi j k] f_k
 *****/
 
-void serial_multidim_fft(_Complex double * cdata, int fdeg, int * nn, int dim, int isign)
+void serial_multidim_fft(_Complex double * cdata, int fdeg, int * nn, int sdim, int isign)
 {
   int id,jd;
   unsigned long i1,i2,i3,i2rev,i3rev,ip1,ip2,ip3,ifp1,ifp2;
@@ -436,10 +373,10 @@ void serial_multidim_fft(_Complex double * cdata, int fdeg, int * nn, int dim, i
   unsigned long j3,j3rev,h1,h2;
   _Complex double w,wp,ctemp,swap;
   double theta,wtemp;       //Double precision for trigonometric recurrences.
-  for (ntot=1,id=0;id<dim;id++) ntot *= nn[id];   // Compute total number of sites.
+  for (ntot=1,id=0;id<sdim;id++) ntot *= nn[id];   // Compute total number of sites.
   nprev=1;
 
-  for (id=dim-1;id>=0;id--) {           // Main loop over the dimensions.
+  for (id=sdim-1;id>=0;id--) {           // Main loop over the dimensions.
     n=nn[id];
     nrem=ntot/(n*nprev);
     ip1=nprev << 1;

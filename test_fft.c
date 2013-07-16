@@ -66,8 +66,6 @@ int main(int argc, char **argv){
   rdata=calloc(deg*_volproc,sizeof(double));
   fdata=calloc(deg*fsize,sizeof(_Complex double));
   
-  if(_proc_id==0) fprintf(stdout,"DEBUG test -- input check: new=%d, dim=%d, deg=%d\n",new,dim,deg);
-
   /***** either we generate a new vector or we take one from disk *****/
 
   if(new==1){             /*** If I need a new vector, I call random number gen, and print it ***/
@@ -132,20 +130,8 @@ int main(int argc, char **argv){
   if(_proc_id==1) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** write the results.  *****/
-  fprintf(stdout,"DEBUG: new=%d,jj=%d,j=%d",new,jj,j);fflush(fid);
-  for(mu=0;mu<dim;mu++){
-    fprintf(stdout,"(pid=%d, mu=%d),"
-	    "_flengths[mu]=%d,_nprocl[mu]=%d,_lengths[mu]=%d,_cbasis[mu]=%d,fbasis[mu]=%d,nbasis[mu]=%d",
-	    _proc_id,mu,_flengths[mu],_nprocl[mu],_lengths[mu],_cbasis[mu],fbasis[mu],_nbasis[mu]);
-  }
-  fprintf(stdout,"\n"); 
-  fflush(fid);
 
   MPI_Barrier(MPI_COMM_WORLD);
-
-  for(mu=0;mu<_dim;mu++) _lengths[mu]=fl[mu]/_nprocl[mu];
-  _cbasis[_ixor[0]]=1;
-  for(mu=1;mu<_dim;mu++) _cbasis[_ixor[mu]]=_cbasis[_ixor[mu-1]]*_lengths[_ixor[mu-1]];
 
   if(new==1){
     sprintf(filename,"data_out_ref");
@@ -168,46 +154,6 @@ int main(int argc, char **argv){
       if(pid==_proc_id){
         j=0;
 	for(mu=0;mu<_dim;mu++) j+=coord[mu]*_cbasis[mu];
-
-	fprintf(stdout,"ODD-PID: pid=%d,poc_id=%d,jj=%d,j=%d,coord=(",pid,_proc_id,jj,j);
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",coord[mu]);
-	}
-	fprintf(stdout,"), gcoord=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",gcoord[mu]);
-	}
-	fprintf(stdout,"), pcoord=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",pcoord[mu]);
-	}
-	fprintf(stdout,"), nprocl=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",_nprocl[mu]);
-	}
-	fprintf(stdout,"), fl=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",fl[mu]);
-	}
-	fprintf(stdout,"), fb=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",fbasis[mu]);
-	}
-	fprintf(stdout,"), cb=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",_cbasis[mu]);
-	}
-	fprintf(stdout,"), lengths=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",_lengths[mu]);
-	}
-	fprintf(stdout,"), nb=(");
-	for(mu=0;mu<_dim;mu++){
-	  fprintf(stdout,"%d,",_nbasis[mu]);
-	}
-	fprintf(stdout,").");
-	fprintf(stdout,"vv=%g, %g\n",creal(data[j]),cimag(data[j]));
-	fflush(stdout);
 
 	fid=fopen(filename,"a");
         fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));fflush(fid);
