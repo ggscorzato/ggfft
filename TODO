@@ -13,3 +13,5 @@ _ordinpout[seqin]=_kk[proc_out];
 foreach needed fft. While the call to transpose only exchanges the appropriate data.
 
 3. call fftw for the serial fft.
+
+4. mv global variables to a structure to be passed to allow any concomitant call of different fft.
