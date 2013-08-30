@@ -1,6 +1,11 @@
 This is the README file of the ggfft library
 
-It is a simple parallel FFT library for data distributed on a M-dimensional toroidal network of processes.  It combines a serial N-dimensional FFT (serial_multidim_fft), which is a slight modification of the Numerical Recipes function fourn, together with a generalized transposition (permute), that exchange the data with MPI.  No HW specific optimization is attempted, neither in the serial FFT step, nor in the permutation. I wrote it because I could not find any reliable FFT for a torus of general dimension M in which N-dimensional (N>M) data are distributed.
+This library is a simple parallel FFT library for data distributed on a M-dimensional toroidal network of
+processes.  It combines a serial N-dimensional (N>M) FFT (serial_multidim_fft), which is a slight modification of
+the Numerical Recipes function fourn, together with a generalized transposition (transpose()), that exchange the
+data with MPI.  No HW specific optimization is attempted, neither in the serial FFT step, nor in the permutation. I
+wrote it because I could not find any reliable FFT for a torus of general dimension M in which N-dimensional (N>M)
+data are distributed.
 
 Compiling the library:
 edit Makefile if necessary (compilers etc...)
