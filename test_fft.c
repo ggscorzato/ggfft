@@ -5,8 +5,8 @@
 #include <math.h>
 #include <mpi.h>
 #include "ranlxd.h"
-#include "ggfft_int.h"
 #include "ggfft.h"
+#include "ggfft_int.h"  // needed only to test transpose
 
 /* How-to test_fft:
 make test_fft
@@ -23,7 +23,8 @@ int main(int argc, char **argv){
   double *rdata,dvar,dvai;
   FILE * fid=NULL;
   char var[128], vai[128], temp[128], filename[50];
-  
+  gg_plan testplan;
+
   /***** Init *****/
   MPI_Init(&argc,&argv);
   MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -55,15 +56,15 @@ int main(int argc, char **argv){
   }
   
   /* init fft */
-  gg_init(dim,fl,np,ixor,deg);
+  gg_init_plan(&testplan,dim,fl,np,ixor,deg);
   
   /* other allocations */
   fbasis=calloc(dim,sizeof(int));
   coord=calloc(dim,sizeof(int));
   gcoord=calloc(dim,sizeof(int));
   pcoord=calloc(dim,sizeof(int));
-  data=calloc(deg*_volproc,sizeof(_Complex double));
-  rdata=calloc(deg*_volproc,sizeof(double));
+  data=calloc(deg*testplan.volproc,sizeof(_Complex double));
+  rdata=calloc(deg*testplan.volproc,sizeof(double));
   fdata=calloc(deg*fsize,sizeof(_Complex double));
   
   /***** either we generate a new vector or we take one from disk *****/
@@ -83,7 +84,7 @@ int main(int argc, char **argv){
     fclose(fid);
     
   } else if(new<1){            /*** otherwise I read it... ***/
-    if(_proc_id==0) {
+    if(testplan.proc_id==0) {
       fid = fopen("data_in_ref", "r");
       j=0;
       while (fgets(temp, 127, fid) != NULL) {
@@ -105,29 +106,30 @@ int main(int argc, char **argv){
     /* ... and put the right data in the right place */
     fbasis[dim-1]=1;
     for(mu=dim-2;mu>=0;mu--) fbasis[mu]=fbasis[mu+1]*fl[mu+1];
-    for(j=0;j<_volproc*deg;j++){
+    for(j=0;j<testplan.volproc*deg;j++){
       jj=0;
       for(mu=0;mu<dim;mu++){
-	coord[mu]= (j / _cbasis[mu]) % _lengths[mu];
-	gcoord[mu]=coord[mu] + _proc_coords[mu]*_lengths[mu];
+	coord[mu]= (j / testplan.cbasis[mu]) % testplan.lengths[mu];
+	gcoord[mu]=coord[mu] + testplan.proc_coords[mu]*testplan.lengths[mu];
 	jj+=gcoord[mu]*fbasis[mu];
       }
       data[j]=fdata[jj];
     }
   }                               /*** end of if(new==...) ***/
 
-  if(_proc_id==1) fprintf(stdout,"DEBUG test -- data generated or read, e.g. data[0].re=%g\n",creal(data[0]));
+  if(testplan.proc_id==1) 
+    fprintf(stdout,"DEBUG test -- data generated or read, e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** Actual FFT *****/
   flag=-1;
 
   if(new==-1){
-    transpose(data,deg,pi,po);
+    transpose(&testplan,data,deg,pi,po);
   } else{
-    gg_distributed_multidim_fft(flag, data, deg);
+    gg_distributed_multidim_fft(&testplan, flag, data, deg);
   }
 
-  if(_proc_id==1) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
+  if(testplan.proc_id==1) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
 
   /***** write the results.  *****/
 
@@ -136,24 +138,24 @@ int main(int argc, char **argv){
   if(new==1){
     sprintf(filename,"data_out_ref");
     fid=fopen(filename,"w");
-    for(j=0;j<_volproc*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
+    for(j=0;j<testplan.volproc*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
     fclose(fid);
   }
   if(new<1){
     sprintf(filename,"data_out_check");
-    for(jj=0;jj<deg*_volproc*_totproc;jj++){
+    for(jj=0;jj<deg*testplan.volproc*testplan.totproc;jj++){
       pid=0;
       for(mu=0;mu<dim;mu++){
         gcoord[mu]= (jj / fbasis[mu] ) % fl[mu];
-        coord[mu] = gcoord[mu]%_lengths[mu];
-        pcoord[mu] = gcoord[mu] / _lengths[mu];
-        pid+=pcoord[mu]*_nbasis[mu];
+        coord[mu] = gcoord[mu]%testplan.lengths[mu];
+        pcoord[mu] = gcoord[mu] / testplan.lengths[mu];
+        pid+=pcoord[mu]*testplan.nbasis[mu];
       }
 
       MPI_Barrier(MPI_COMM_WORLD);
-      if(pid==_proc_id){
+      if(pid==testplan.proc_id){
         j=0;
-	for(mu=0;mu<_dim;mu++) j+=coord[mu]*_cbasis[mu];
+	for(mu=0;mu<testplan.dim;mu++) j+=coord[mu]*testplan.cbasis[mu];
 
 	fid=fopen(filename,"a");
         fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));fflush(fid);
@@ -162,10 +164,10 @@ int main(int argc, char **argv){
       MPI_Barrier(MPI_COMM_WORLD);
     }
   }
-  if(_proc_id==0) fprintf(stdout,"DEBUG test -- data written\n");
+  if(testplan.proc_id==0) fprintf(stdout,"DEBUG test -- data written\n");
   
   /***** Finalize *****/
-  gg_finalize();
+  gg_destroy_plan(&testplan);
   MPI_Finalize();
   return(0);
 

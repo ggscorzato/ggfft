@@ -1,2 +1,4 @@
 2013/7/9: first working version. Still very limited testing performed.
 2013/7/16: now tested on a non-negligible set of cases. Still far from "releasable".
+2013/8/30: global variables substituted by a struct, which is initialized by gg_init_plan and destroyed 
+	   by gg_destroy_plan

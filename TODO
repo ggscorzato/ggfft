@@ -4,14 +4,12 @@ DEBUGGING:
 
 IMPROVEMENTS:
 
-1. Substitute the variable _Mail with one which has only size=_volproc.
+1. Substitute the variable .Mail with one which has only size=.volproc*deg.
 
 2. Introduce an init_transpose, to be executed in init to pre-compute the indices:
 _idest[seqin]=seqout;
 _pdest[seqin]=proc_out;
 _ordinpout[seqin]=_kk[proc_out];
-foreach needed fft. While the call to transpose only exchanges the appropriate data.
+foreach needed fft. While the call to transpose should only exchange the appropriate data.
 
 3. call fftw for the serial fft.
-
-4. mv global variables to a structure to be passed to allow any concomitant call of different fft.

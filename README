@@ -1,26 +1,28 @@
 This is the README file of the ggfft library
 
-This library is a simple parallel FFT library for data distributed on a M-dimensional toroidal network of
-processes.  It combines a serial N-dimensional (N>M) FFT (serial_multidim_fft), which is a slight modification of
-the Numerical Recipes function fourn, together with a generalized transposition (transpose()), that exchange the
-data with MPI.  No HW specific optimization is attempted, neither in the serial FFT step, nor in the permutation. I
-wrote it because I could not find any reliable FFT for a torus of general dimension M in which N-dimensional (N>M)
-data are distributed.
+This library is a simple parallel FFT library for data distributed on a M-dimensional toroidal network of 
+p_1 x... x p_M processes.  It combines a serial N-dimensional (N>M) FFT (serial_multidim_fft), which is a slight
+modification of the Numerical Recipes function "fourn", together with a generalized transposition (transpose()), that
+exchange the data with MPI.  No HW specific optimization is attempted, neither in the serial FFT step, nor in the
+transposition. I wrote it because I could not find any reliable FFT for a torus of general dimension M in which
+N-dimensional (N>M) data are distributed.
 
 Compiling the library:
 edit Makefile if necessary (compilers etc...)
 make
 
 Using the library:
-The user should call three routines:
-    gg_init(...) once for the initialization
-    gg_distributed_multidim_fft(...), which actually does the FFT
-    gg_finalize() for clean exit (free the allocated memory)
+The user should declare a plan:
+    gg_plan myplan;
+and call three routines:
+    gg_init_plan(&myplan,...) for each plan to be used
+    gg_distributed_multidim_fft(&myplan,...), which actually does the FFT
+    gg_destroy_plan(&myplan,...) to free the allocated memory
 The user should also include the header file "ggfft.h" and link the executable to libggfft.a
 
 
 Limitation:
--No optimization on the serial FFT is attempted (basically fourn of Numerical Recipes)
+-No optimization on the serial FFT is attempted (it is essentially the fourn routine of Numerical Recipes)
 -The serial FFT is limited to data lengths of power of 2.
--communication in permute are very naive: the topology of the torus is not yet exploited.
+-communication in transpose does not really exploit the topology of the torus.
 -dimension of the data should be larger than the dimension of the torus.
