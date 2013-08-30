@@ -80,7 +80,7 @@ int main(int argc, char **argv){
     for(j=0;j<fsize*deg;j++) data[j]+= I * rdata[j];
     
     fid = fopen("data_in_ref", "w");
-    for(j=0;j<fsize*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
+    for(j=0;j<fsize*deg;j++) fprintf(fid,"%15.14e, %15.14e\n",creal(data[j]),cimag(data[j]));
     fclose(fid);
     
   } else if(new<1){            /*** otherwise I read it... ***/
@@ -96,7 +96,7 @@ int main(int argc, char **argv){
       }
       fclose(fid);
       fid = fopen("data_in_check", "w");
-      for(j=0;j<fsize*deg;j++) fprintf(fid,"%g, %g\n",creal(fdata[j]),cimag(fdata[j]));
+      for(j=0;j<fsize*deg;j++) fprintf(fid,"%15.14e, %15.14e\n",creal(fdata[j]),cimag(fdata[j]));
       fclose(fid);
     }
 
@@ -124,9 +124,9 @@ int main(int argc, char **argv){
   flag=-1;
 
   if(new==-1){
-    transpose(&testplan,data,deg,pi,po);
+    transpose(&testplan,data,pi,po);
   } else{
-    gg_distributed_multidim_fft(&testplan, flag, data, deg);
+    gg_distributed_multidim_fft(&testplan, flag, data);
   }
 
   if(testplan.proc_id==1) fprintf(stdout,"DEBUG test -- FFT performed , e.g. data[0].re=%g\n",creal(data[0]));
@@ -138,7 +138,7 @@ int main(int argc, char **argv){
   if(new==1){
     sprintf(filename,"data_out_ref");
     fid=fopen(filename,"w");
-    for(j=0;j<testplan.volproc*deg;j++) fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));
+    for(j=0;j<testplan.volproc*deg;j++) fprintf(fid,"%15.14e, %15.14e\n",creal(data[j]),cimag(data[j]));
     fclose(fid);
   }
   if(new<1){
@@ -158,7 +158,7 @@ int main(int argc, char **argv){
 	for(mu=0;mu<testplan.dim;mu++) j+=coord[mu]*testplan.cbasis[mu];
 
 	fid=fopen(filename,"a");
-        fprintf(fid,"%g, %g\n",creal(data[j]),cimag(data[j]));fflush(fid);
+        fprintf(fid,"%15.14e, %15.14e\n",creal(data[j]),cimag(data[j]));fflush(fid);
 	fclose(fid);
       }
       MPI_Barrier(MPI_COMM_WORLD);

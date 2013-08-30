@@ -7,20 +7,21 @@ typedef struct {
   int *flengths;
   int *nprocl;
   int *ixor;
+  int deg;
 
   /* set automatically in init_plan */
   int fftdim;
   int *fftdir;
   int *nfftdir;
   int *proc_coords;
-  int *lengths;
-  int *cbasis;
   int *nbasis;
   int proc_id;
   int volproc;
   int totproc;
 
-  /* service */
+  /* service (can change in the fft call) */
+  int *lengths;
+  int *cbasis;
   int **label;
   int *label_;
   int *kk;
@@ -32,7 +33,7 @@ typedef struct {
 } gg_plan;
 
 void gg_init_plan(gg_plan *plan, int dim, int *flengths, int *nprocl, int *ixor, int deg);
-void gg_distributed_multidim_fft(gg_plan *plan, int fftflag, _Complex double * vv, int deg);
+void gg_distributed_multidim_fft(gg_plan *plan, int fftflag, _Complex double * vv);
 void gg_destroy_plan(gg_plan *plan);
 
 #endif

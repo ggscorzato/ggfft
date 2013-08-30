@@ -25,6 +25,7 @@ void gg_init_plan(gg_plan *pln, int dim, int *flengths, int *nprocl, int *ixor, 
   pln->flengths=flengths;
   pln->nprocl=nprocl;
   pln->ixor=ixor;
+  pln->deg=deg;
 
   /*** define coordinates of this process w.r.t. the whole lattice, both sequential (pln->proc_id) and vector
      (pln->proc_coords) ***/
@@ -135,12 +136,12 @@ void gg_init_plan(gg_plan *pln, int dim, int *flengths, int *nprocl, int *ixor, 
   for(i=1;i<maxprocdir;i++){
     pln->label[i] = pln->label[i-1]+pln->volproc;
   }
-  pln->mail__=(_Complex double*)malloc(maxprocdir*pln->volproc*deg*sizeof(_Complex double));
+  pln->mail__=(_Complex double*)malloc(maxprocdir*pln->volproc*pln->deg*sizeof(_Complex double));
   pln->mail_=(_Complex double**)malloc(maxprocdir*pln->volproc*sizeof(_Complex double*));
   pln->Mail = (_Complex double***)malloc(maxprocdir*sizeof(_Complex double**));
   pln->mail_[0]=pln->mail__;
   for(i=1;i<maxprocdir*pln->volproc;i++){
-    pln->mail_[i]=pln->mail_[i-1] + deg;
+    pln->mail_[i]=pln->mail_[i-1] + pln->deg;
   }
   pln->Mail[0]=pln->mail_;
   for(i=1;i<maxprocdir;i++){
@@ -168,10 +169,9 @@ void gg_destroy_plan(gg_plan *pln){
 /*****  distributed multidimensional FFT.
 	fftflag: 1 direct FFT, -1 inverse FFT
 	vv: array of size= deg * (\prod_mu pln->flengths[mu]). This vector will be fft'd.
-	deg: internal degeneracy of the data in vv. 
 *****/
 
-void gg_distributed_multidim_fft(gg_plan *pln, int fftflag, _Complex double * vv, int deg){
+void gg_distributed_multidim_fft(gg_plan *pln, int fftflag, _Complex double * vv){
 
   int nfftpoints,repl_slow,repl_fast,mu,it,jj;
   int *nn, *inperm, *outperm;
@@ -206,8 +206,9 @@ void gg_distributed_multidim_fft(gg_plan *pln, int fftflag, _Complex double * vv
   for(it=0;it<pln->dim;it+=pln->fftdim){  /* loop on fft subspaces */
 
     for(jj=0;jj<repl_slow;jj++){  /* loop on all points in orthogonal directions */
-      pnt0=vv+(jj*(nfftpoints)*repl_fast*deg);
-      serial_multidim_fft(pnt0,repl_fast*deg,nn,pln->fftdim,fftflag);  /* fft on the LAST pln->fftdim directions */
+      pnt0=vv+(jj*(nfftpoints)*repl_fast*pln->deg);
+      /* fft on the LAST pln->fftdim directions */
+      serial_multidim_fft(pnt0,repl_fast*pln->deg,nn,pln->fftdim,fftflag);
     }
     
     if(it<pln->dim-pln->fftdim){                   /* transpose after fft, except the last time */
@@ -217,7 +218,7 @@ void gg_distributed_multidim_fft(gg_plan *pln, int fftflag, _Complex double * vv
 	outperm[pln->fftdir[mu]] = inperm[pln->nfftdir[it+mu]];
       }
 
-      transpose(pln,vv,deg,inperm,outperm);
+      transpose(pln,vv,inperm,outperm);
       
       for(mu=0; mu<pln->fftdim;mu++) nn[pln->fftdim-1-mu] = pln->flengths[outperm[pln->fftdir[mu]]];
       for(mu=0;mu<pln->dim;mu++) pln->lengths[mu]=pln->flengths[outperm[mu]]/pln->nprocl[mu];
@@ -242,7 +243,7 @@ void gg_distributed_multidim_fft(gg_plan *pln, int fftflag, _Complex double * vv
       outperm[pln->fftdir[mu]] = inperm[pln->nfftdir[it+mu]];
     }
 
-    transpose(pln,vv,deg,inperm,outperm);
+    transpose(pln,vv,inperm,outperm);
     for(mu=0; mu<pln->dim;mu++) inperm[mu]=outperm[mu];
   }
 
@@ -260,12 +261,11 @@ void gg_distributed_multidim_fft(gg_plan *pln, int fftflag, _Complex double * vv
       Transposes the dim-dimensional array vv (linearly arranged), according to the input/output permutations
       permutin/permutout.
       -vv[]: array of size= deg * (\prod_mu pln->flengths[mu]). This vector will be transposed. [I&O]
-      -deg: internal degeneracy in the data of vv.
       -permutin[]: permutation of the indices assumed for the input
       -permutout[]: permutation of the indices to be found in the output
 *****/
 
-void transpose(gg_plan *pln, _Complex double * vv, int deg, int * permutin, int * permutout){
+void transpose(gg_plan *pln, _Complex double * vv, int * permutin, int * permutout){
 
   int seqin,seqout,mu,ind,i,j,ka,proc_out,nprocdest;
   int *lleng_in,*lleng_out,*temp_orig,*locoIn,* glcoIn,*locoOut,* glcoOut,*proc_coordOut,*cbasisIn,*cbasisOut;
@@ -322,7 +322,7 @@ void transpose(gg_plan *pln, _Complex double * vv, int deg, int * permutin, int 
       nprocdest++;
     }
     /* store index and variable for send */
-    for(j=0;j<deg;j++) pln->Mail[pln->pp[proc_out]][pln->kk[proc_out]][j]=vv[i*deg+j];
+    for(j=0;j<pln->deg;j++) pln->Mail[pln->pp[proc_out]][pln->kk[proc_out]][j]=vv[i*pln->deg+j];
     pln->label[pln->pp[proc_out]][pln->kk[proc_out]]=seqout;
     pln->kk[proc_out]++;
   } // end of main loop on every local site.
@@ -333,7 +333,7 @@ void transpose(gg_plan *pln, _Complex double * vv, int deg, int * permutin, int 
     if(ind!=pln->proc_id && pln->kk[ind] != 0){
       MPI_Sendrecv_replace(pln->label[pln->pp[ind]],pln->kk[ind],MPI_INT,ind,pln->totproc+pln->proc_id,
 			   ind,pln->totproc+ind,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-      MPI_Sendrecv_replace(pln->Mail[pln->pp[ind]][0],pln->kk[ind]*deg,MPI_DOUBLE_COMPLEX,ind,pln->proc_id,
+      MPI_Sendrecv_replace(pln->Mail[pln->pp[ind]][0],pln->kk[ind]*pln->deg,MPI_DOUBLE_COMPLEX,ind,pln->proc_id,
 			   ind,ind,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
     }
   }
@@ -341,8 +341,8 @@ void transpose(gg_plan *pln, _Complex double * vv, int deg, int * permutin, int 
 
   for(ind=0; ind< pln->totproc; ind++){   // copy back the exchanged data onto the array vv
     for(ka=0; ka< pln->kk[ind]; ka++){
-      for(j=0;j<deg;j++){
-	vv[pln->label[pln->pp[ind]][ka]*deg+j]=pln->Mail[pln->pp[ind]][ka][j];
+      for(j=0;j<pln->deg;j++){
+	vv[pln->label[pln->pp[ind]][ka]*pln->deg+j]=pln->Mail[pln->pp[ind]][ka][j];
       }
     }
   }
