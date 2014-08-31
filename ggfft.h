@@ -18,6 +18,7 @@ typedef struct {
   int proc_id;
   int volproc;
   int totproc;
+  MPI_Comm cart_comm;
 
   /* service (can change in the fft call) */
   int *lengths;
@@ -32,7 +33,7 @@ typedef struct {
   _Complex double *mail__;
 } gg_plan;
 
-void gg_init_plan(gg_plan *plan, int dim, int *flengths, int *nprocl, int *ixor, int deg);
+void gg_init_plan(gg_plan *plan, int dim, int *flengths, int *nprocl, int *ixor, int deg, MPI_Comm old_comm);
 void gg_distributed_multidim_fft(gg_plan *plan, int fftflag, _Complex double * vv);
 void gg_destroy_plan(gg_plan *plan);
 

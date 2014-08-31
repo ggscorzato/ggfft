@@ -56,7 +56,7 @@ int main(int argc, char **argv){
   }
   
   /* init fft */
-  gg_init_plan(&testplan,dim,fl,np,ixor,deg);
+  gg_init_plan(&testplan,dim,fl,np,ixor,deg,MPI_COMM_WORLD);
   
   /* other allocations */
   fbasis=calloc(dim,sizeof(int));

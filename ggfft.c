@@ -15,10 +15,10 @@
       ixor[]: array of length dim; ixor[0] is the fastest direction, ixor[dim-1] the slowest in lexicografic order.
       the three pointers above should be already allocated before passing them to gg_init.
 *****/
-void gg_init_plan(gg_plan *pln, int dim, int *flengths, int *nprocl, int *ixor, int deg){
+void gg_init_plan(gg_plan *pln, int dim, int *flengths, int *nprocl, int *ixor, int deg, MPI_Comm old_comm){
 
   int mu,i,*periods,*isfft,check,maxprocdir;
-  MPI_Comm cart_comm;
+  MPI_Comm comm;
 
   /*** copy the user set variables to global variables ***/
   pln->dim=dim;
@@ -32,10 +32,11 @@ void gg_init_plan(gg_plan *pln, int dim, int *flengths, int *nprocl, int *ixor, 
   pln->proc_coords=calloc(pln->dim,sizeof(int));
   periods=calloc(pln->dim,sizeof(int));
   for(mu=0;mu<pln->dim;mu++) periods[mu]=1; // torus
-  MPI_Cart_create(MPI_COMM_WORLD, pln->dim, pln->nprocl, periods, 1, &cart_comm);
-  MPI_Comm_rank(cart_comm,&pln->proc_id);
-  MPI_Cart_coords(cart_comm,pln->proc_id,pln->dim,pln->proc_coords);
-  MPI_Comm_size(cart_comm,&check);
+  MPI_Cart_create(old_comm, pln->dim, pln->nprocl, periods, 1, &comm);
+  pln->cart_comm=comm;
+  MPI_Comm_rank(pln->cart_comm,&pln->proc_id);
+  MPI_Cart_coords(pln->cart_comm,pln->proc_id,pln->dim,pln->proc_coords);
+  MPI_Comm_size(pln->cart_comm,&check);
   pln->totproc=1;
   for(mu=0;mu<pln->dim;mu++) pln->totproc*=pln->nprocl[mu];
   if(check!=pln->totproc){
@@ -327,17 +328,17 @@ void transpose(gg_plan *pln, _Complex double * vv, int * permutin, int * permuto
     pln->kk[proc_out]++;
   } // end of main loop on every local site.
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(pln->cart_comm);
 
   for(ind=0; ind < pln->totproc; ind++){  // Send
     if(ind!=pln->proc_id && pln->kk[ind] != 0){
       MPI_Sendrecv_replace(pln->label[pln->pp[ind]],pln->kk[ind],MPI_INT,ind,pln->totproc+pln->proc_id,
-			   ind,pln->totproc+ind,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+			   ind,pln->totproc+ind,pln->cart_comm,MPI_STATUS_IGNORE);
       MPI_Sendrecv_replace(pln->Mail[pln->pp[ind]][0],pln->kk[ind]*pln->deg,MPI_DOUBLE_COMPLEX,ind,pln->proc_id,
-			   ind,ind,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+			   ind,ind,pln->cart_comm,MPI_STATUS_IGNORE);
     }
   }
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(pln->cart_comm);
 
   for(ind=0; ind< pln->totproc; ind++){   // copy back the exchanged data onto the array vv
     for(ka=0; ka< pln->kk[ind]; ka++){
